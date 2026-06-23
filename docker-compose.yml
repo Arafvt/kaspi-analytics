@@ -1,0 +1,47 @@
+# Имя проекта зафиксировано → имена тома/сети не зависят от папки запуска
+# (том с данными БД остаётся kaspi-rnp_kaspi_pgdata при любом расположении).
+name: kaspi-rnp
+
+services:
+  kaspi_postgres:
+    image: postgres:16-alpine
+    container_name: kaspi_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5433:5432"          # хост 5433 → контейнер 5432 (на 5432 уже нативный PG Windows)
+    volumes:
+      - kaspi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kaspi_backend:
+    build: ./backend
+    container_name: kaspi_backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    ports:
+      - "8080:8080"
+    depends_on:
+      kaspi_postgres:
+        condition: service_healthy
+
+  kaspi_frontend:
+    build: ./frontend
+    container_name: kaspi_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - kaspi_backend
+
+volumes:
+  kaspi_pgdata:

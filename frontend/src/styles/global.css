@@ -1,0 +1,42 @@
+:root {
+  /* Палитра (светлая, белый фон) */
+  --bg: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-row: #f3f4f6;        /* лёгкий фон для hover/зебры */
+  --border: #e3e6ea;
+  --text: #1a1d21;
+  --text-muted: #6b7280;
+  --accent: #f14635;        /* Kaspi red */
+
+  /* Индикация маржи (тёмные оттенки для читаемости на белом) */
+  --good: #1a7f37;
+  --warn: #9a6700;
+  --bad: #cf222e;
+
+  --radius: 8px;
+  --gap: 12px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

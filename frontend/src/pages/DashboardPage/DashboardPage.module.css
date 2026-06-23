@@ -1,0 +1,364 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.loading {
+  padding: 40px;
+  color: var(--text-muted);
+}
+
+/* ── Фильтр столбцов ─────────────────────────────────────────── */
+.filterBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterLabel {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-right: 4px;
+}
+
+.chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.chip:hover {
+  color: var(--text);
+}
+
+.chipOn {
+  background: rgba(76, 141, 255, 0.14);
+  border-color: #4c8dff;
+  color: #1f6feb;
+  font-weight: 600;
+}
+
+.searchInput {
+  width: 280px;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.syncOk {
+  color: var(--good);
+  font-size: 12px;
+}
+
+.select {
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ── Карточки месяца ─────────────────────────────────────────── */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: 16px;
+  border-top: 2px solid var(--border);
+}
+
+.card_plan {
+  border-top-color: #3b82f6;
+}
+
+.card_forecast {
+  border-top-color: var(--warn);
+}
+
+.card_fact {
+  border-top-color: var(--accent);
+}
+
+.cardTitle {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.cardRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 13px;
+}
+
+.cardLabel {
+  color: var(--text-muted);
+}
+
+.cardValue {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.deltaUp {
+  color: var(--good);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.deltaDown {
+  color: var(--bad);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Секции ──────────────────────────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sectionHint {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ── Таблица динамики ────────────────────────────────────────── */
+.dailyWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.daily {
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.daily th {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 9px 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+
+.daily td {
+  padding: 9px 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.stickyL {
+  position: sticky;
+  left: 0;
+  text-align: left !important;
+  background: var(--bg-elevated) !important;
+  color: var(--text) !important;
+  font-weight: 500;
+  z-index: 1;
+}
+
+.stickyPlan {
+  position: sticky;
+  left: 120px;
+  background: var(--bg-row) !important;
+  color: var(--text) !important;
+  font-weight: 600;
+  border-right: 1px solid var(--border);
+  z-index: 1;
+}
+
+.cellGood {
+  color: var(--good);
+  background: rgba(63, 185, 80, 0.08);
+}
+
+.cellBad {
+  color: var(--bad);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+/* ── Блоки товаров ───────────────────────────────────────────── */
+.products {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.product {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: 14px;
+}
+
+.pInfo {
+  display: flex;
+  gap: 12px;
+}
+
+.pThumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  background: var(--bg-row);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.pSku {
+  color: #3b82f6;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.pName {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 2px 0 6px;
+  max-width: 230px;
+}
+
+.pPrice {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pMargins {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.badgeNoAds,
+.badgeWAds {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.badgeNoAds {
+  background: rgba(63, 185, 80, 0.12);
+  color: var(--good);
+}
+
+.badgeWAds {
+  background: rgba(210, 153, 34, 0.12);
+  color: var(--warn);
+}
+
+.pBlocks {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.pBlock {
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 10px 12px;
+  border-top: 2px solid var(--border);
+}
+
+.pBlockTitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  letter-spacing: 0.03em;
+}
+
+.pRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.pRow span:first-child {
+  color: var(--text-muted);
+}
+
+.pRow span:last-child {
+  font-weight: 600;
+  display: inline-flex;
+  gap: 5px;
+  align-items: baseline;
+}

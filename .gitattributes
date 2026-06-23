@@ -1,0 +1,11 @@
+# В репозитории всегда LF (важно для Dockerfile/shell/конфигов в Linux-контейнерах)
+* text=auto eol=lf
+
+# Бинарные — не нормализовать
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.xlsx binary
+*.woff  binary
+*.woff2 binary

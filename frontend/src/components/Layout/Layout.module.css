@@ -1,0 +1,52 @@
+.shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: 100%;
+}
+
+.sidebar {
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--accent);
+  padding: 0 8px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.navItem {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+.navItem:hover {
+  background: var(--bg-row);
+  color: var(--text);
+}
+
+.navItemActive {
+  background: var(--bg-row);
+  color: var(--text);
+}
+
+.content {
+  padding: 24px;
+  overflow: auto;
+  height: 100vh;
+  box-sizing: border-box;
+}

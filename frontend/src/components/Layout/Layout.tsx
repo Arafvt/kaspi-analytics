@@ -6,6 +6,7 @@ const NAV = [
   { to: '/dashboard', label: 'Дашборд' },
   { to: '/unit', label: 'UNIT' },
   { to: '/plan', label: 'ПЛАН' },
+  { to: '/analytics', label: 'Аналитика' },
   { to: '/costs', label: 'Себестоимость / Реклама' },
 ];
 

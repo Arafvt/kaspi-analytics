@@ -1,13 +1,32 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
+import { loadUpliftRates } from '../services/rnpData.js';
 
 /**
  * Ввод справочников: COGS, ставки комиссии, реклама (ДРР), план, настройки.
  */
 export async function costsRoutes(app: FastifyInstance): Promise<void> {
+  // Надбавка за рассрочку по сроку (3/6/12/24 мес), доля от выручки
+  app.get('/api/costs/credit-uplift', async () => ({ rates: await loadUpliftRates() }));
+  app.post('/api/costs/credit-uplift', async (req) => {
+    const b = req.body as { term?: string; value?: number };
+    if (!b?.term) return { ok: false, error: 'term required' };
+    const v = Number(b.value);
+    if (!Number.isFinite(v) || v < 0) return { ok: false, error: 'bad value' };
+    await query(
+      `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [`credit_uplift_${b.term}`, String(v)],
+    );
+    return { ok: true };
+  });
+
   // Чтение справочников
   app.get('/api/costs/cogs', async () => {
-    const items = await query(`SELECT sku, cogs, packaging FROM sku_costs ORDER BY sku`);
+    const items = await query(
+      `SELECT c.sku, s.name, s.category_code AS category, c.cogs, c.packaging
+         FROM sku_costs c LEFT JOIN sku s ON s.sku = c.sku
+        ORDER BY c.sku`,
+    );
     return { items };
   });
   app.get('/api/costs/commission', async () => {
@@ -47,7 +66,7 @@ export async function costsRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, rate };
   });
 
-  // Доставка из Китая за 1 шт (₸) — независимая от курса величина
+  // Доставка из Китая за 1 шт (₸) — ручное значение (fallback, если нет веса/цены за кг)
   app.post('/api/costs/china', async (req) => {
     const b = req.body as { sku?: string; value?: number };
     if (!b?.sku) return { ok: false, error: 'sku required' };
@@ -57,6 +76,79 @@ export async function costsRoutes(app: FastifyInstance): Promise<void> {
       `INSERT INTO sku_costs (sku, china_delivery, packaging, updated_at)
        VALUES ($1, $2, COALESCE((SELECT packaging FROM sku_costs WHERE sku=$1),0), now())
        ON CONFLICT (sku) DO UPDATE SET china_delivery = EXCLUDED.china_delivery, updated_at = now()`,
+      [b.sku, Math.round(v)],
+    );
+    return { ok: true, value: Math.round(v) };
+  });
+
+  // Текущий курс $→₸ (0 = не задан)
+  async function usdRate(): Promise<number> {
+    const r = await query<{ value: string }>(`SELECT value FROM settings WHERE key = 'fx_usd'`);
+    return r[0] ? Number(r[0].value) : 0;
+  }
+  // Пересчёт доставки из Китая = weight × delivery_per_kg × курс$ для одного SKU
+  const CHINA_RECALC = `UPDATE sku_costs SET china_delivery = round(weight * delivery_per_kg * $2), updated_at = now()
+                          WHERE sku = $1 AND weight IS NOT NULL AND delivery_per_kg IS NOT NULL`;
+
+  // Глобальный курс $→₸: меняем настройку и пересчитываем доставку у всех
+  app.post('/api/costs/usd', async (req) => {
+    const rate = Number((req.body as { rate?: number })?.rate);
+    if (!Number.isFinite(rate) || rate <= 0) return { ok: false, error: 'bad rate' };
+    await query(
+      `INSERT INTO settings (key, value) VALUES ('fx_usd', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [String(rate)],
+    );
+    await query(
+      `UPDATE sku_costs SET china_delivery = round(weight * delivery_per_kg * $1), updated_at = now()
+        WHERE weight IS NOT NULL AND delivery_per_kg IS NOT NULL`,
+      [rate],
+    );
+    return { ok: true, rate };
+  });
+
+  // Вес за 1 шт (кг) — исходник для доставки; после записи пересчитываем доставку
+  app.post('/api/costs/weight', async (req) => {
+    const b = req.body as { sku?: string; value?: number };
+    if (!b?.sku) return { ok: false, error: 'sku required' };
+    const v = Number(b.value);
+    if (!Number.isFinite(v) || v < 0) return { ok: false, error: 'bad value' };
+    await query(
+      `INSERT INTO sku_costs (sku, weight, packaging, updated_at)
+       VALUES ($1, $2, COALESCE((SELECT packaging FROM sku_costs WHERE sku=$1),0), now())
+       ON CONFLICT (sku) DO UPDATE SET weight = EXCLUDED.weight, updated_at = now()`,
+      [b.sku, v],
+    );
+    await query(CHINA_RECALC, [b.sku, await usdRate()]);
+    return { ok: true, value: v };
+  });
+
+  // Цена доставки за 1 кг ($) — исходник для доставки; после записи пересчитываем доставку
+  app.post('/api/costs/perkg', async (req) => {
+    const b = req.body as { sku?: string; value?: number };
+    if (!b?.sku) return { ok: false, error: 'sku required' };
+    const v = Number(b.value);
+    if (!Number.isFinite(v) || v < 0) return { ok: false, error: 'bad value' };
+    await query(
+      `INSERT INTO sku_costs (sku, delivery_per_kg, packaging, updated_at)
+       VALUES ($1, $2, COALESCE((SELECT packaging FROM sku_costs WHERE sku=$1),0), now())
+       ON CONFLICT (sku) DO UPDATE SET delivery_per_kg = EXCLUDED.delivery_per_kg, updated_at = now()`,
+      [b.sku, v],
+    );
+    await query(CHINA_RECALC, [b.sku, await usdRate()]);
+    return { ok: true, value: v };
+  });
+
+  // Упаковка/маркировка за 1 шт (₸)
+  app.post('/api/costs/packaging', async (req) => {
+    const b = req.body as { sku?: string; value?: number };
+    if (!b?.sku) return { ok: false, error: 'sku required' };
+    const v = Number(b.value);
+    if (!Number.isFinite(v) || v < 0) return { ok: false, error: 'bad value' };
+    await query(
+      `INSERT INTO sku_costs (sku, packaging, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (sku) DO UPDATE SET packaging = EXCLUDED.packaging, updated_at = now()`,
       [b.sku, Math.round(v)],
     );
     return { ok: true, value: Math.round(v) };

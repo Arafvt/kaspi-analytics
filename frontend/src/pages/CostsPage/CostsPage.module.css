@@ -86,3 +86,38 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+
+/* Надбавка за рассрочку */
+.upliftRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.upliftRow:last-child { border-bottom: none; }
+
+.upliftLabel { font-size: 13px; }
+
+.upliftInputWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.upliftInput {
+  width: 80px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  text-align: right;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+.upliftInput:focus { border-color: var(--accent); }
+
+.upliftSuffix { color: var(--text-muted); font-size: 13px; }

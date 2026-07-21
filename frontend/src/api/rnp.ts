@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { UnitRow, PlanRow, DailyPoint } from '../types/rnp';
+import type { UnitRow, PlanRow, DailyPoint, AnalyticsData } from '../types/rnp';
 import type { DashboardData } from '../types/dashboard';
 
 /** Вызовы РНП-API бэкенда (в dev проксируются на :8080 — см. vite.config). */
@@ -15,6 +15,9 @@ export const rnpApi = {
 
   savePlan: (b: { sku: string; month: string; planSum?: number; planQty?: number; targetDrr?: number; planProfit?: number; approved?: boolean }) =>
     api.post<{ ok: boolean }>(`/api/rnp/plan`, b),
+
+  analytics: (month: string) =>
+    api.get<AnalyticsData>(`/api/rnp/analytics?month=${month}`),
 
   daily: (sku: string, month: string) =>
     api.get<{ sku: string; days: DailyPoint[] }>(`/api/rnp/daily/${sku}?month=${month}`),
@@ -45,6 +48,18 @@ export const costsApi = {
     api.post<{ ok: boolean; cogs: number }>(`/api/costs/cogs`, { sku, cogsYuan }),
   setFx: (rate: number) =>
     api.post<{ ok: boolean; rate: number }>(`/api/costs/fx`, { rate }),
+  setUsd: (rate: number) =>
+    api.post<{ ok: boolean; rate: number }>(`/api/costs/usd`, { rate }),
+  setWeight: (sku: string, value: number) =>
+    api.post<{ ok: boolean; value: number }>(`/api/costs/weight`, { sku, value }),
+  setPerKg: (sku: string, value: number) =>
+    api.post<{ ok: boolean; value: number }>(`/api/costs/perkg`, { sku, value }),
   setChina: (sku: string, value: number) =>
     api.post<{ ok: boolean; value: number }>(`/api/costs/china`, { sku, value }),
+  setPackaging: (sku: string, value: number) =>
+    api.post<{ ok: boolean; value: number }>(`/api/costs/packaging`, { sku, value }),
+  creditUplift: () =>
+    api.get<{ rates: Record<string, number> }>(`/api/costs/credit-uplift`),
+  setCreditUplift: (term: string, value: number) =>
+    api.post<{ ok: boolean }>(`/api/costs/credit-uplift`, { term, value }),
 };

@@ -24,4 +24,7 @@ const CAT_RU: Record<string, string> = {
 };
 
 /** Англ. код категории Kaspi → русское название (фолбэк: убрать префикс «Master - »). */
-export const catRu = (c: string): string => CAT_RU[c] ?? (c.replace(/^Master - /, '') || '—');
+export const catRu = (c: string | null | undefined): string => {
+  if (!c) return '—';
+  return CAT_RU[c] ?? (c.replace(/^Master - /, '') || '—');
+};

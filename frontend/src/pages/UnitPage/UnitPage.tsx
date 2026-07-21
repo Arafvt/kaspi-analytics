@@ -5,9 +5,10 @@ import { tenge, percent, qty, marginLevel } from '../../utils/format';
 import { catRu } from '../../utils/category';
 import { FilterBar, filterChip } from '../../components/FilterBar/FilterBar';
 import type { UnitRow } from '../../types/rnp';
+import { currentMonth } from '../../utils/months';
 import styles from './UnitPage.module.css';
 
-const PERIOD = '2026-06';
+const PERIOD = currentMonth();
 const nf = new Intl.NumberFormat('ru-RU');
 const div = (a: number, b: number) => (b ? a / b : 0);
 
@@ -15,7 +16,7 @@ const div = (a: number, b: number) => (b ? a / b : 0);
 const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const tokenRegex = (t: string) => new RegExp(`\\b${escRe(t)}${/^\d+$/.test(t) ? '(?![0-9])' : '(?![A-Za-z])'}`, 'i');
 
-type Kind = 'money' | 'qty' | 'count' | 'ratio' | 'yuan' | 'rate';
+type Kind = 'money' | 'qty' | 'count' | 'ratio' | 'yuan' | 'rate' | 'weight' | 'usd';
 type Mode = 'total' | 'unit' | 'pct';
 interface Col {
   key: string;
@@ -26,7 +27,7 @@ interface Col {
   noUnit?: boolean;  // нет режима «за 1 шт» (ср.клик)
   adOnly?: boolean;
   color?: 'margin' | 'profit';
-  edit?: 'yuan' | 'fx' | 'china';  // редактируемое поле
+  edit?: 'yuan' | 'fx' | 'usd' | 'weight' | 'perkg' | 'pack';  // редактируемое поле
 }
 const canPct = (c: Col) => c.kind === 'money' && !c.noPct;
 const canUnit = (c: Col) => c.kind === 'money' && !c.noUnit;
@@ -37,18 +38,25 @@ const BLOCKS: Block[] = [
   { name: 'Продажи', cols: [
     { key: 'revenue', label: 'Выручка', kind: 'money', noPct: true, get: (r) => r.revenue },
     { key: 'units', label: 'Продано', kind: 'qty', get: (r) => r.units },
+    { key: 'cancelPct', label: '% отмен', kind: 'ratio', get: (r) => r.cancelPct },
     { key: 'returnPct', label: '% возвр.', kind: 'ratio', get: (r) => r.returnPct },
+    { key: 'creditShare', label: 'Рассрочка', kind: 'ratio', get: (r) => r.creditShare },
   ] },
   { name: 'Расходы', cols: [
     { key: 'commission', label: 'Комиссия', kind: 'money', get: (r) => r.commission },
+    { key: 'creditUplift', label: 'Надбавка', kind: 'money', get: (r) => r.creditUplift },
     { key: 'delivery', label: 'Доставка', kind: 'money', get: (r) => r.delivery },
     { key: 'tax', label: 'Налог', kind: 'money', get: (r) => r.tax },
   ] },
   { name: 'Закупка / себестоимость', cols: [
     { key: 'cogsYuan', label: 'Закуп ¥', kind: 'yuan', edit: 'yuan', get: (r) => r.cogsYuan },
-    { key: 'fxRate', label: 'Курс', kind: 'rate', edit: 'fx', get: (r) => r.fxRate },
+    { key: 'fxRate', label: 'Курс ¥', kind: 'rate', edit: 'fx', get: (r) => r.fxRate },
     { key: 'cogsNoDeliv', label: 'Себест. без дост.', kind: 'money', get: (r) => r.cogsNoDeliv },
-    { key: 'chinaDelivery', label: 'Доставка Китай', kind: 'money', edit: 'china', get: (r) => r.chinaDelivery },
+    { key: 'weight', label: 'Вес, кг', kind: 'weight', edit: 'weight', get: (r) => r.weight },
+    { key: 'deliveryPerKg', label: 'Дост. за кг $', kind: 'usd', edit: 'perkg', get: (r) => r.deliveryPerKg },
+    { key: 'usdRate', label: 'Курс $', kind: 'rate', edit: 'usd', get: (r) => r.usdRate },
+    { key: 'chinaDelivery', label: 'Доставка Китай', kind: 'money', get: (r) => r.chinaDelivery },
+    { key: 'packaging', label: 'Упаковка', kind: 'money', edit: 'pack', get: (r) => r.packagingTotal },
     { key: 'cogsTotal', label: 'Себест. с дост.', kind: 'money', get: (r) => r.cogsTotal },
   ] },
   { name: 'Реклама', cols: [
@@ -93,6 +101,8 @@ function cellText(c: Col, r: UnitRow, mode: Mode): string {
   if (c.kind === 'count') return nf.format(Math.round(v));
   if (c.kind === 'qty') return qty(v);
   if (c.kind === 'yuan') return v > 0 ? `${Math.round(v * 100) / 100} ¥` : '—';
+  if (c.kind === 'weight') return v > 0 ? `${Math.round(v * 1000) / 1000} кг` : '—';
+  if (c.kind === 'usd') return v > 0 ? `${Math.round(v * 100) / 100} $` : '—';
   if (c.kind === 'rate') return v > 0 ? nf.format(v) : '—';
   if (mode === 'pct' && !c.noPct) return percent(div(v, r.revenue));
   if (mode === 'unit' && !c.noUnit) return tenge(div(v, r.units));
@@ -100,6 +110,7 @@ function cellText(c: Col, r: UnitRow, mode: Mode): string {
 }
 
 type Rule = { green: number | null; red: number | null };
+type FilterCond = { id: number; key: string; op: '>=' | '<='; value: string };
 
 export function UnitPage() {
   const [rows, setRows] = useState<UnitRow[]>([]);
@@ -120,6 +131,10 @@ export function UnitPage() {
   const [rules, setRules] = useState<Record<string, Rule>>(() => {
     try { return JSON.parse(localStorage.getItem('unit_rules') ?? '{}'); } catch { return {}; }
   });
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<FilterCond[]>(() => {
+    try { return JSON.parse(localStorage.getItem('unit_filters') ?? '[]'); } catch { return []; }
+  });
   const [importMsg, setImportMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -134,6 +149,15 @@ export function UnitPage() {
     localStorage.setItem('unit_rules', JSON.stringify(r));
   };
 
+  const saveFilters = (f: FilterCond[]) => {
+    setFilters(f);
+    localStorage.setItem('unit_filters', JSON.stringify(f));
+  };
+  const addFilter = () => saveFilters([...filters, { id: Math.max(0, ...filters.map((x) => x.id)) + 1, key: 'marginWAds', op: '>=', value: '' }]);
+  const updFilter = (id: number, patch: Partial<FilterCond>) => saveFilters(filters.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  const delFilter = (id: number) => saveFilters(filters.filter((f) => f.id !== id));
+  const activeFilters = filters.filter((f) => f.value !== '').length;
+
   const categories = useMemo(() => [...new Set(rows.map((r) => r.category))].sort(), [rows]);
 
   const filtered = useMemo(() => {
@@ -141,6 +165,16 @@ export function UnitPage() {
     const list = rows.filter((r) => {
       if (category && r.category !== category) return false;
       if (q && !r.name.toLowerCase().includes(q) && !r.sku.includes(q)) return false;
+      // умные фильтры: показываем только товары, проходящие ВСЕ условия
+      for (const f of filters) {
+        if (f.value === '') continue;
+        const col = FLAT.find((c) => c.key === f.key);
+        if (!col) continue;
+        const target = Number(String(f.value).replace(',', '.'));
+        if (!Number.isFinite(target)) continue;
+        const v = cellNumber(col, r, 'total'); // ₸ для денег, % для долей
+        if (f.op === '>=' ? v < target : v > target) return false;
+      }
       return true;
     });
     if (sort) {
@@ -157,7 +191,7 @@ export function UnitPage() {
       });
     }
     return list;
-  }, [rows, search, category, sort]);
+  }, [rows, search, category, sort, filters]);
 
   const groups = useMemo(() => {
     if (!group) return null;
@@ -320,8 +354,8 @@ export function UnitPage() {
   }
 
   const startEdit = (c: Col, r: UnitRow) => {
-    // доставка Китай редактируется ЗА 1 ШТ (а столбец показывает всего)
-    const seed = c.edit === 'china' ? r.chinaPerUnit : c.get(r);
+    // упаковка редактируется ЗА 1 ШТ (столбец показывает всего); вес/дост-за-кг/курсы — как есть
+    const seed = c.edit === 'pack' ? r.packagingPerUnit : c.get(r);
     setEdit({ sku: r.sku, key: c.key });
     setEditVal(String(seed || ''));
   };
@@ -332,7 +366,10 @@ export function UnitPage() {
     try {
       if (c.edit === 'yuan') await costsApi.setCogs(r.sku, num);
       else if (c.edit === 'fx') await costsApi.setFx(num);
-      else if (c.edit === 'china') await costsApi.setChina(r.sku, num);
+      else if (c.edit === 'usd') await costsApi.setUsd(num);
+      else if (c.edit === 'weight') await costsApi.setWeight(r.sku, num);
+      else if (c.edit === 'perkg') await costsApi.setPerKg(r.sku, num);
+      else if (c.edit === 'pack') await costsApi.setPackaging(r.sku, num);
       load();
     } catch { /* ignore */ }
   };
@@ -365,7 +402,7 @@ export function UnitPage() {
             key={c.key}
             className={`${thresholdClass(c, r) ?? ''} ${c.edit ? styles.editable : ''}`}
             onClick={c.edit ? () => startEdit(c, r) : undefined}
-            title={c.edit === 'china' ? 'Клик — изменить (доставка из Китая за 1 шт, ₸)' : c.edit ? 'Клик — изменить' : undefined}
+            title={c.edit === 'pack' ? 'Клик — изменить (упаковка за 1 шт, ₸)' : c.edit === 'weight' ? 'Клик — изменить (вес за 1 шт, кг)' : c.edit === 'perkg' ? 'Клик — изменить (доставка за 1 кг, $)' : c.edit === 'usd' ? 'Клик — изменить (курс $, общий)' : c.edit === 'fx' ? 'Клик — изменить (курс ¥, общий)' : c.edit ? 'Клик — изменить' : undefined}
           >
             {cellText(c, r, modeOf(c))}
           </td>
@@ -394,6 +431,9 @@ export function UnitPage() {
           </button>
           <button type="button" className={filterChip(showThresholds)} onClick={() => setShowThresholds((s) => !s)}>
             Пороги-цвета
+          </button>
+          <button type="button" className={filterChip(showFilters || activeFilters > 0)} onClick={() => setShowFilters((s) => !s)}>
+            Фильтры{activeFilters > 0 ? ` (${activeFilters})` : ''}
           </button>
           <label className={styles.importBtn}>
             Импорт Excel
@@ -427,6 +467,35 @@ export function UnitPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {showFilters && (
+        <div className={styles.thrPanel}>
+          <div className={styles.thrHint}>
+            Показываем только товары, проходящие <b>все</b> условия. Деньги — в ₸ (всего за период), доли (маржа, ДРР, % возврата, рассрочка, CTR, ROI) — в процентах.
+          </div>
+          {filters.map((f) => (
+            <div key={f.id} className={styles.filterRow}>
+              <select className={styles.filterField} value={f.key} onChange={(e) => updFilter(f.id, { key: e.target.value })}>
+                {FLAT.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+              <select className={styles.filterOp} value={f.op} onChange={(e) => updFilter(f.id, { op: e.target.value as '>=' | '<=' })}>
+                <option value=">=">≥</option>
+                <option value="<=">≤</option>
+              </select>
+              <input className={styles.thrInput} type="number" placeholder="значение" value={f.value}
+                onChange={(e) => updFilter(f.id, { value: e.target.value })} />
+              <button type="button" className={styles.filterDel} onClick={() => delFilter(f.id)} title="Удалить условие">✕</button>
+            </div>
+          ))}
+          <div className={styles.filterActions}>
+            <button type="button" className={styles.filterAdd} onClick={addFilter}>+ Добавить условие</button>
+            {filters.length > 0 && (
+              <button type="button" className={styles.filterReset} onClick={() => saveFilters([])}>Сбросить все</button>
+            )}
+            <span className={styles.filterCount}>Показано {filtered.length} из {rows.length}</span>
           </div>
         </div>
       )}

@@ -290,6 +290,79 @@
 }
 .thrInput:focus { border-color: var(--accent); }
 
+/* Конструктор умных фильтров */
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.filterField {
+  flex: 1;
+  max-width: 240px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+.filterField:focus, .filterOp:focus { border-color: var(--accent); }
+.filterOp {
+  width: 54px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  outline: none;
+  cursor: pointer;
+}
+.filterDel {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.filterDel:hover { color: var(--bad); border-color: var(--bad); }
+.filterActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.filterAdd {
+  padding: 7px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: rgba(76, 141, 255, 0.1);
+  color: #1f6feb;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.filterReset {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.filterCount {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
 /* Цвета ячеек по порогам */
 .cellGood { color: var(--good); background: rgba(26, 127, 55, 0.12); font-weight: 600; }
 .cellWarn { color: var(--warn); background: rgba(154, 103, 0, 0.12); font-weight: 600; }

@@ -4,9 +4,10 @@ import { tenge, percent, qty } from '../../utils/format';
 import { catRu } from '../../utils/category';
 import { FilterBar, filterChip } from '../../components/FilterBar/FilterBar';
 import type { PlanRow } from '../../types/rnp';
+import { recentMonths } from '../../utils/months';
 import styles from './PlanPage.module.css';
 
-const MONTHS = ['2026-06', '2026-05', '2026-04'];
+const MONTHS = recentMonths();
 const COLSPAN = 14;
 
 /** % выполнения плана → класс цвета. */

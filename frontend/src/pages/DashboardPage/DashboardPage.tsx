@@ -4,9 +4,10 @@ import { tenge, percent } from '../../utils/format';
 import { ProductTable } from '../../components/ProductTable/ProductTable';
 import { FilterBar } from '../../components/FilterBar/FilterBar';
 import type { DashboardData, MonthBlock, DailyMetric } from '../../types/dashboard';
+import { recentMonths } from '../../utils/months';
 import styles from './DashboardPage.module.css';
 
-const MONTHS = ['2026-06', '2026-05', '2026-04'];
+const MONTHS = recentMonths();
 const nf = new Intl.NumberFormat('ru-RU');
 
 /** Форматирование ячейки динамики по типу метрики. */

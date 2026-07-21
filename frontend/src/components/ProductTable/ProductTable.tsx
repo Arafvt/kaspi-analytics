@@ -160,15 +160,20 @@ function ProductBand({ p, cols }: { p: ProductRowData; cols: Cols }) {
       </div>
 
       <div className={styles.colInfo}>
+        {/* «Сумма заказов» — валовая, как в кабинете Kaspi (вкл. отменённые).
+            Деньги, которые реально дошли, — это «Выкуп» ниже: отменённый заказ продажей не является. */}
         <div className={styles.infoLine}><span>Заказы</span><b>{nf.format(p.ordersQty)} шт</b></div>
-        <div className={styles.infoLine}><span>Выручка</span><b>{tenge(p.revenue)}</b></div>
+        <div className={styles.infoLine}><span>Сумма заказов</span><b>{tenge(p.revenue)}</b></div>
+        <div className={styles.infoLine}><span>Выкуп</span><b>{tenge(p.factMonth.buyoutSum)}</b></div>
         <div className={styles.badgeGood}>Маржа до ДРР {percent(p.marginNoAds)}</div>
         <div className={styles.badgeWarn}>Маржа с ДРР {percent(p.marginWAds)}</div>
       </div>
 
       <div className={styles.colInfo}>
         <div className={styles.infoLine}><span>Остаток</span><b>{nf.format(p.stock.stock)}</b></div>
-        <div className={styles.infoLine}><span>Хватит</span><b>{p.stock.daysLeft} дн</b></div>
+        {/* daysLeft = null — продаж нет, делить не на что: «—», а не «0 дн» */}
+        <div className={styles.infoLine}><span>Хватит</span><b>{p.stock.daysLeft == null ? '—' : `${p.stock.daysLeft} дн`}</b></div>
+        <div className={styles.infoLine}><span>Отмены</span><b>{percent(p.stock.cancelPct)}</b></div>
         <div className={styles.infoLine}><span>Возвраты</span><b>{percent(p.stock.returnPct)}</b></div>
         <div className={styles.infoLine}><span>Выкуп</span><b>{percent(p.stock.buyoutPct)}</b></div>
         <div className={styles.infoLine}><span>ДРР цель</span><b>{percent(p.stock.drr)}</b></div>

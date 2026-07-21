@@ -45,10 +45,11 @@ export interface MetricSet {
 
 /** Остатки / конверсия (левый блок). */
 export interface ProductStock {
-  stock: number;        // остаток, шт
-  daysLeft: number;     // на сколько дней хватит
-  returnPct: number;    // % возвратов
-  buyoutPct: number;    // % выкупа (1 − возвраты)
+  stock: number;        // остаток на витрине, шт
+  daysLeft: number | null; // на сколько дней хватит; null — продаж нет, срок не определён
+  cancelPct: number;    // % отмен (отменённые заказы / валовые заказы)
+  returnPct: number;    // % возвратов (выкупили и вернули)
+  buyoutPct: number;    // % выкупа (1 − отмены − возвраты)
   drr: number;          // целевой ДРР
 }
 

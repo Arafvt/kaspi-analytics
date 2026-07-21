@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS sku_costs (
 );
 ALTER TABLE sku_costs ADD COLUMN IF NOT EXISTS cogs_yuan NUMERIC;
 ALTER TABLE sku_costs ADD COLUMN IF NOT EXISTS china_delivery NUMERIC DEFAULT 0;
+-- Доставка из Китая = weight × delivery_per_kg × курс$ (fx_usd). Исходники — из МойСклад.
+ALTER TABLE sku_costs ADD COLUMN IF NOT EXISTS weight NUMERIC;          -- вес за единицу, кг
+ALTER TABLE sku_costs ADD COLUMN IF NOT EXISTS delivery_per_kg NUMERIC; -- цена доставки за 1 кг, $
 
 -- Ставки комиссии по категориям (справочник, ручной)
 CREATE TABLE IF NOT EXISTS category_commission (
@@ -54,30 +57,52 @@ CREATE INDEX IF NOT EXISTS idx_orders_raw_sku_day ON orders_raw(sku, day);
 CREATE INDEX IF NOT EXISTS idx_orders_raw_day      ON orders_raw(day);
 
 -- Факт продаж по дням (агрегат, ПЕРЕсобирается из orders_raw)
+--   выкуп = orders − cancels − returns
+-- orders_* — ВАЛОВЫЕ заказы дня (как в кабинете Kaspi), включая отменённые.
+-- Отмены и возвраты вычитаются отдельно, чтобы «% отмен» был виден, а не спрятан.
 CREATE TABLE IF NOT EXISTS sales_daily (
   sku            TEXT REFERENCES sku(sku),
   day            DATE,
-  orders_sum     NUMERIC DEFAULT 0,         -- выручка ₸ (по продажным заказам дня)
+  orders_sum     NUMERIC DEFAULT 0,         -- валовые заказы дня, ₸ (вкл. отменённые)
   orders_qty     INTEGER DEFAULT 0,
-  returns_sum    NUMERIC DEFAULT 0,
+  cancels_sum    NUMERIC DEFAULT 0,         -- отменённые (CANCELLED + CANCELLING), ₸
+  cancels_qty    INTEGER DEFAULT 0,
+  returns_sum    NUMERIC DEFAULT 0,         -- возвраты (RETURNED), ₸
   returns_qty    INTEGER DEFAULT 0,
-  delivery_cost  NUMERIC DEFAULT 0,
+  delivery_cost  NUMERIC DEFAULT 0,         -- доставка продавца (по неотменённым)
   PRIMARY KEY (sku, day)
 );
+-- на случай существующей БД
+ALTER TABLE sales_daily ADD COLUMN IF NOT EXISTS cancels_sum NUMERIC DEFAULT 0;
+ALTER TABLE sales_daily ADD COLUMN IF NOT EXISTS cancels_qty INTEGER DEFAULT 0;
 
--- Рекламные расходы (ручной ввод, ДРР) — нет в API
+-- Рекламные расходы (ручной ввод из отчётов, ДРР) — нет в API.
+-- Привязаны к ПЕРИОДУ дат отчёта (а не к месяцу): реклама показывается только в свои дни.
 CREATE TABLE IF NOT EXISTS ad_spend (
   sku            TEXT REFERENCES sku(sku),
-  period_month   TEXT,                      -- 'YYYY-MM'
-  amount         NUMERIC DEFAULT 0,         -- расходы на рекламу, ₸
+  period_start   DATE,                      -- начало периода рекламы (из имени отчёта)
+  period_end     DATE,                      -- конец периода
+  period_month   TEXT,                      -- 'YYYY-MM' (месяц period_start) — для месячной агрегации
+  amount         NUMERIC DEFAULT 0,         -- расходы на рекламу за период, ₸
   ad_views       NUMERIC DEFAULT 0,         -- показы
   ad_clicks      NUMERIC DEFAULT 0,         -- клики (переходы в карточку)
   ad_orders      NUMERIC DEFAULT 0,         -- заказы с рекламы
-  PRIMARY KEY (sku, period_month)
+  PRIMARY KEY (sku, period_start)
 );
-ALTER TABLE ad_spend ADD COLUMN IF NOT EXISTS ad_views  NUMERIC DEFAULT 0;
-ALTER TABLE ad_spend ADD COLUMN IF NOT EXISTS ad_clicks NUMERIC DEFAULT 0;
-ALTER TABLE ad_spend ADD COLUMN IF NOT EXISTS ad_orders NUMERIC DEFAULT 0;
+
+-- Остатки и цены с витрины (кабинет продавца mc.shop.kaspi.kz) — нет в публичном API.
+-- БЕЗ FK на sku: витрина и таблица sku строятся из разных источников (sku — из заказов),
+-- поэтому здесь есть товары, которых ни разу не заказывали. Это и есть реальный каталог.
+CREATE TABLE IF NOT EXISTS sku_stock (
+  sku            TEXT PRIMARY KEY,          -- артикул продавца (совпадает с sku.sku)
+  name           TEXT,
+  stock          INTEGER DEFAULT 0,         -- суммарный остаток по всем складам, шт
+  price          NUMERIC DEFAULT 0,         -- мин. цена по городам, ₸
+  available      BOOLEAN DEFAULT true,      -- в продаже
+  master_code    TEXT,
+  stores         JSONB,                     -- разбивка по складам: [{storeId, stockCount}]
+  updated_at     TIMESTAMPTZ DEFAULT now()
+);
 
 -- Планы продаж по месяцам (ручной ввод)
 CREATE TABLE IF NOT EXISTS sales_plan (

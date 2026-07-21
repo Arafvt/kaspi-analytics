@@ -9,9 +9,15 @@ import { getOrdersPage, getOrderEntries } from '../kaspi/client.js';
  * sales_daily ПЕРЕсобирается из orders_raw за затронутые дни → нет двойного счёта.
  *
  * Классификация для агрегата (raw хранится, можно переопределить):
- *  - orders_*  (валовые заказы) = статус ≠ CANCELLED
- *  - returns_* = статус = RETURNED
- *  - выкуп (в движке) = orders − returns
+ *  - orders_*  = ВСЕ заказы дня (валовые, как в кабинете Kaspi)
+ *  - cancels_* = статус CANCELLED или CANCELLING
+ *  - returns_* = статус RETURNED
+ *  - выкуп (в движке) = orders − cancels − returns
+ *
+ * Отменённые заказы ХРАНИМ, а не удаляем: без них «% отмен» посчитать не из чего,
+ * а отмены — это ~11% заказов, то есть главная дыра между заказами и выкупом.
+ * CANCELLING приравнен к отмене: заказ уже в процессе отмены, считать его
+ * выручкой нельзя (иначе выкуп завышен).
  */
 
 const DAY = 86_400_000;
@@ -56,10 +62,18 @@ async function writeMeta(ok: boolean, cursorTs: number, error?: string): Promise
   );
 }
 
+/**
+ * Kaspi для части позиций отдаёт пустой offer.name (у нас таких 8: держатель F162,
+ * мыши M44/m64/m76 и др.). Пустым именем НЕ затираем уже известное — иначе имя,
+ * восстановленное из мастер-товара, пропадало бы на следующем же синке.
+ * То же для категории.
+ */
 async function upsertSku(sku: string, name: string, categoryCode: string | null): Promise<void> {
   await query(
-    `INSERT INTO sku (sku, name, category_code) VALUES ($1, $2, $3)
-     ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name, category_code = EXCLUDED.category_code`,
+    `INSERT INTO sku (sku, name, category_code) VALUES ($1, NULLIF($2,''), $3)
+     ON CONFLICT (sku) DO UPDATE SET
+       name          = COALESCE(NULLIF(EXCLUDED.name, ''), sku.name),
+       category_code = COALESCE(EXCLUDED.category_code, sku.category_code)`,
     [sku, name, categoryCode],
   );
 }
@@ -81,22 +95,31 @@ async function upsertOrderEntry(row: {
   );
 }
 
+/** Статусы, означающие «заказ не состоится» — отмена покупателем/магазином. */
+const CANCEL_STATUSES = ['CANCELLED', 'CANCELLING'];
+
 /** Пересобрать sales_daily из orders_raw за указанные дни. */
 async function rebuildSalesDaily(days: string[]): Promise<void> {
   if (days.length === 0) return;
   await query(`DELETE FROM sales_daily WHERE day = ANY($1::date[])`, [days]);
   await query(
-    `INSERT INTO sales_daily (sku, day, orders_sum, orders_qty, returns_sum, returns_qty, delivery_cost)
+    `INSERT INTO sales_daily
+       (sku, day, orders_sum, orders_qty, cancels_sum, cancels_qty, returns_sum, returns_qty, delivery_cost)
      SELECT sku, day,
-       COALESCE(SUM(sum)           FILTER (WHERE status <> 'CANCELLED'), 0),
-       COALESCE(SUM(qty)           FILTER (WHERE status <> 'CANCELLED'), 0),
-       COALESCE(SUM(sum)           FILTER (WHERE status =  'RETURNED'),  0),
-       COALESCE(SUM(qty)           FILTER (WHERE status =  'RETURNED'),  0),
-       COALESCE(SUM(delivery_cost) FILTER (WHERE status <> 'CANCELLED'), 0)
+       COALESCE(SUM(sum), 0),                                             -- валовые заказы
+       COALESCE(SUM(qty), 0),
+       COALESCE(SUM(sum) FILTER (WHERE status = ANY($2)), 0),             -- отмены
+       COALESCE(SUM(qty) FILTER (WHERE status = ANY($2)), 0),
+       COALESCE(SUM(sum) FILTER (WHERE status = 'RETURNED'), 0),          -- возвраты
+       COALESCE(SUM(qty) FILTER (WHERE status = 'RETURNED'), 0),
+       -- Доставку берём как есть, БЕЗ фильтра по статусу: Kaspi сам обнуляет
+       -- deliveryCostForSeller, когда курьер не поехал (у отменённых она есть лишь
+       -- у 26 из 195). Те, где осталась, — отказ у курьера: рейс был, продавец платит.
+       COALESCE(SUM(delivery_cost), 0)
      FROM orders_raw
      WHERE day = ANY($1::date[])
      GROUP BY sku, day`,
-    [days],
+    [days, CANCEL_STATUSES],
   );
 }
 
@@ -132,16 +155,9 @@ export async function runOrdersSync(opts: SyncOpts = {}): Promise<SyncResult> {
           maxCreation = Math.max(maxCreation, a.creationDate);
           const day = almatyDay(a.creationDate);
 
-          if (a.status === 'CANCELLED') {
-            const prev = await query<{ d: string }>(
-              `SELECT DISTINCT to_char(day,'YYYY-MM-DD') AS d FROM orders_raw WHERE order_code = $1`,
-              [a.code],
-            );
-            for (const r of prev) affectedDays.add(r.d);
-            await query(`DELETE FROM orders_raw WHERE order_code = $1`, [a.code]);
-            continue;
-          }
-
+          // Отменённые заказы тоже сохраняем (см. шапку файла): статус приезжает
+          // в UPSERT, поэтому заказ, отменённый после первого синка, сам перейдёт
+          // из выкупа в отмены при следующем проходе.
           const ent = await getOrderEntries(order.id);
           for (const entry of ent.data ?? []) {
             const ea = entry.attributes;

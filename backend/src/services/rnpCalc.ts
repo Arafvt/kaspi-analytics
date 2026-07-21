@@ -3,7 +3,7 @@
  * Повторяет логику WB 10X (см. reference/10x/ANALYSIS.md), адаптированную под Kaspi:
  *  - nm_id → sku
  *  - сложный perc_mp (комиссия+логистика+хранение+эквайринг) → единый take-rate категории
- *  - expected_buyouts_sum_rub → выкупленная выручка = orders_sum − returns_sum
+ *  - expected_buyouts_sum_rub → выкупленная выручка = orders_sum − cancels_sum − returns_sum
  *  - нет spp / локализации (на Kaspi отсутствуют)
  *  - ДРР — ручной ввод (рекламного API нет)
  *
@@ -18,8 +18,10 @@ export const div = (a: number, b: number): number => (b === 0 ? 0 : a / b);
 /** Подневный факт по SKU (из sales_daily; источник заполнит sync). */
 export interface DailyFact {
   day: string; // 'YYYY-MM-DD'
-  ordersSum: number; // выручка заказов, ₸
+  ordersSum: number; // ВАЛОВЫЕ заказы, ₸ (включая отменённые)
   ordersQty: number;
+  cancelsSum: number; // отменённые заказы, ₸ (CANCELLED + CANCELLING)
+  cancelsQty: number;
   returnsSum: number; // возвраты, ₸
   returnsQty: number;
   deliveryCost: number; // доставка (если продавец платит), ₸
@@ -32,6 +34,7 @@ export interface SkuCosts {
   commissionRate: number; // take-rate категории Kaspi, доля (0.12 = 12%)
   taxRate: number; // налог, доля
   adSpend: number; // ДРР за период (ручной ввод), ₸
+  creditUplift?: number; // надбавка Kaspi за рассрочку за период (абсолют, ₸); 0 если нет
 }
 
 // ── Агрегация факта ───────────────────────────────────────────
@@ -39,9 +42,11 @@ export interface SkuCosts {
 export interface FactTotals {
   ordersSum: number;
   ordersQty: number;
+  cancelsSum: number;
+  cancelsQty: number;
   returnsSum: number;
   returnsQty: number;
-  /** выкупленная выручка = orders_sum − returns_sum (Kaspi-аналог expected_buyouts) */
+  /** выкупленная выручка = orders_sum − cancels_sum − returns_sum (Kaspi-аналог expected_buyouts) */
   buyoutSum: number;
   buyoutQty: number;
   delivery: number;
@@ -49,18 +54,21 @@ export interface FactTotals {
 
 export function aggregateFacts(daily: DailyFact[]): FactTotals {
   const t: FactTotals = {
-    ordersSum: 0, ordersQty: 0, returnsSum: 0, returnsQty: 0,
+    ordersSum: 0, ordersQty: 0, cancelsSum: 0, cancelsQty: 0, returnsSum: 0, returnsQty: 0,
     buyoutSum: 0, buyoutQty: 0, delivery: 0,
   };
   for (const d of daily) {
     t.ordersSum += d.ordersSum;
     t.ordersQty += d.ordersQty;
+    t.cancelsSum += d.cancelsSum;
+    t.cancelsQty += d.cancelsQty;
     t.returnsSum += d.returnsSum;
     t.returnsQty += d.returnsQty;
     t.delivery += d.deliveryCost;
   }
-  t.buyoutSum = t.ordersSum - t.returnsSum;
-  t.buyoutQty = t.ordersQty - t.returnsQty;
+  // отменённый заказ не доехал, возвращённый — доехал и вернулся: денег нет ни там, ни там
+  t.buyoutSum = t.ordersSum - t.cancelsSum - t.returnsSum;
+  t.buyoutQty = t.ordersQty - t.cancelsQty - t.returnsQty;
   return t;
 }
 
@@ -70,6 +78,8 @@ export interface SkuMetrics {
   // факт
   ordersSum: number;
   ordersQty: number;
+  cancelsSum: number;
+  cancelsQty: number;
   returnsSum: number;
   returnsQty: number;
   buyoutSum: number;
@@ -77,6 +87,7 @@ export interface SkuMetrics {
   delivery: number;
   // косты
   commission: number;
+  creditUplift: number; // надбавка за рассрочку, ₸
   cogsTotal: number;
   tax: number;
   adSpend: number;
@@ -88,7 +99,9 @@ export interface SkuMetrics {
   marginWithoutAdv: number; // маржа до ДРР
   marginWithAdv: number; // маржа с ДРР
   krr: number; // КРРР
-  returnPct: number; // % возвратов
+  cancelPct: number; // % отмен (от валовых заказов)
+  returnPct: number; // % возвратов (от валовых заказов)
+  lossPct: number; // % несостоявшихся заказов = отмены + возвраты
   buyoutPct: number; // % выкупа
   roi: number;
   unitProfit: number; // прибыль на штуку
@@ -103,28 +116,33 @@ export function krr(profitWithAdv: number, profitWithoutAdv: number): number {
 /**
  * Полный набор метрик SKU за период.
  * Базы (Kaspi-адаптация):
- *  - комиссия и налог берутся с ВЫКУПЛЕННОЙ выручки (возвраты не облагаются);
+ *  - комиссия и налог берутся с ВЫКУПЛЕННОЙ выручки (отмены и возвраты не облагаются);
  *  - себестоимость — за фактически проданные (выкупленные) единицы;
- *  - ДРР% = реклама / заказы (как в 10X: adv_sum/orders_sum_rub).
+ *  - ДРР% = реклама / ВАЛОВЫЕ заказы — та же база, что у «Доли рекламных расходов»
+ *    в кабинете Kaspi, иначе наш ДРР расходится с кабинетом.
  */
 export function calcSkuMetrics(f: FactTotals, c: SkuCosts): SkuMetrics {
   const commission = f.buyoutSum * c.commissionRate;
+  const creditUplift = c.creditUplift ?? 0; // надбавка Kaspi за рассрочку (абсолют ₸)
   const cogsTotal = (c.cogs + c.packaging) * f.buyoutQty;
   const tax = f.buyoutSum * c.taxRate;
   const delivery = f.delivery;
 
-  const profitWithoutAdv = f.buyoutSum - commission - delivery - cogsTotal - tax;
+  const profitWithoutAdv = f.buyoutSum - commission - creditUplift - delivery - cogsTotal - tax;
   const profitWithAdv = profitWithoutAdv - c.adSpend;
 
   return {
     ordersSum: f.ordersSum,
     ordersQty: f.ordersQty,
+    cancelsSum: f.cancelsSum,
+    cancelsQty: f.cancelsQty,
     returnsSum: f.returnsSum,
     returnsQty: f.returnsQty,
     buyoutSum: f.buyoutSum,
     buyoutQty: f.buyoutQty,
     delivery,
     commission,
+    creditUplift,
     cogsTotal,
     tax,
     adSpend: c.adSpend,
@@ -134,7 +152,9 @@ export function calcSkuMetrics(f: FactTotals, c: SkuCosts): SkuMetrics {
     marginWithoutAdv: div(profitWithoutAdv, f.buyoutSum),
     marginWithAdv: div(profitWithAdv, f.buyoutSum),
     krr: krr(profitWithAdv, profitWithoutAdv),
+    cancelPct: div(f.cancelsSum, f.ordersSum),
     returnPct: div(f.returnsSum, f.ordersSum),
+    lossPct: div(f.cancelsSum + f.returnsSum, f.ordersSum),
     buyoutPct: div(f.buyoutQty, f.ordersQty),
     roi: div(profitWithAdv, cogsTotal),
     unitProfit: div(profitWithAdv, f.buyoutQty),

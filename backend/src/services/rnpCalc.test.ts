@@ -11,21 +11,31 @@ import {
 } from './rnpCalc.js';
 
 const day = (p: Partial<DailyFact>): DailyFact => ({
-  day: '2026-06-01', ordersSum: 0, ordersQty: 0, returnsSum: 0, returnsQty: 0, deliveryCost: 0, ...p,
+  day: '2026-06-01', ordersSum: 0, ordersQty: 0, cancelsSum: 0, cancelsQty: 0,
+  returnsSum: 0, returnsQty: 0, deliveryCost: 0, ...p,
 });
 
 describe('aggregateFacts', () => {
-  it('суммирует и считает выкуп = заказы − возвраты', () => {
+  it('суммирует и считает выкуп = заказы − отмены − возвраты', () => {
     const t = aggregateFacts([
-      day({ ordersSum: 60_000, ordersQty: 60, returnsSum: 5_000, returnsQty: 5, deliveryCost: 1_000 }),
-      day({ ordersSum: 40_000, ordersQty: 40, returnsSum: 5_000, returnsQty: 5, deliveryCost: 1_000 }),
+      day({ ordersSum: 60_000, ordersQty: 60, cancelsSum: 6_000, cancelsQty: 6, returnsSum: 5_000, returnsQty: 5, deliveryCost: 1_000 }),
+      day({ ordersSum: 40_000, ordersQty: 40, cancelsSum: 4_000, cancelsQty: 4, returnsSum: 5_000, returnsQty: 5, deliveryCost: 1_000 }),
     ]);
     expect(t.ordersSum).toBe(100_000);
     expect(t.ordersQty).toBe(100);
+    expect(t.cancelsSum).toBe(10_000);
     expect(t.returnsSum).toBe(10_000);
-    expect(t.buyoutSum).toBe(90_000); // 100000 − 10000
-    expect(t.buyoutQty).toBe(90);
+    expect(t.buyoutSum).toBe(80_000); // 100000 − 10000 − 10000
+    expect(t.buyoutQty).toBe(80);
     expect(t.delivery).toBe(2_000);
+  });
+
+  it('отменённый заказ не попадает в выкуп', () => {
+    const t = aggregateFacts([
+      day({ ordersSum: 10_000, ordersQty: 10, cancelsSum: 10_000, cancelsQty: 10 }),
+    ]);
+    expect(t.buyoutSum).toBe(0);
+    expect(t.buyoutQty).toBe(0);
   });
 });
 
@@ -48,7 +58,7 @@ describe('calcSkuMetrics', () => {
   });
 
   it('относительные метрики', () => {
-    expect(m.drr).toBeCloseTo(0.05, 6); // 5000 / 100000 (от заказов)
+    expect(m.drr).toBeCloseTo(0.05, 6); // 5000 / 100000 (от валовых заказов)
     expect(m.marginWithoutAdv).toBeCloseTo(45_700 / 90_000, 6);
     expect(m.marginWithAdv).toBeCloseTo(40_700 / 90_000, 6);
     expect(m.krr).toBeCloseTo(40_700 / 45_700, 6);
@@ -56,6 +66,19 @@ describe('calcSkuMetrics', () => {
     expect(m.buyoutPct).toBeCloseTo(0.9, 6);
     expect(m.roi).toBeCloseTo(40_700 / 28_800, 6);
     expect(m.unitProfit).toBeCloseTo(40_700 / 90, 6);
+  });
+
+  it('отмены и возвраты разделены и не смешиваются', () => {
+    const t = aggregateFacts([
+      day({ ordersSum: 100_000, ordersQty: 100, cancelsSum: 20_000, cancelsQty: 20, returnsSum: 5_000, returnsQty: 5 }),
+    ]);
+    const mm = calcSkuMetrics(t, costs);
+    expect(mm.cancelPct).toBeCloseTo(0.2, 6);
+    expect(mm.returnPct).toBeCloseTo(0.05, 6);
+    expect(mm.lossPct).toBeCloseTo(0.25, 6);
+    expect(mm.buyoutPct).toBeCloseTo(0.75, 6);
+    // комиссия/налог только с выкупа: отменённый заказ Kaspi не тарифицирует
+    expect(mm.commission).toBeCloseTo(75_000 * 0.12, 6);
   });
 
   it('не делит на ноль при пустом периоде', () => {

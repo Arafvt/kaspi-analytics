@@ -13,7 +13,8 @@ import {
 import { calcSkuMetrics, aggregateFacts, type DailyFact, type SkuCosts } from './rnpCalc.js';
 
 const day = (p: Partial<DailyFact>): DailyFact => ({
-  day: '2026-06-01', ordersSum: 0, ordersQty: 0, returnsSum: 0, returnsQty: 0, deliveryCost: 0, ...p,
+  day: '2026-06-01', ordersSum: 0, ordersQty: 0, cancelsSum: 0, cancelsQty: 0,
+  returnsSum: 0, returnsQty: 0, deliveryCost: 0, ...p,
 });
 
 const costs: SkuCosts = { cogs: 300, packaging: 0, commissionRate: 0.1, taxRate: 0, adSpend: 3_000 };

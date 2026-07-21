@@ -55,6 +55,7 @@ export interface ProductInput {
   daily: DailyFact[]; // подневный факт за месяц
   costs: SkuCosts;
   plan: SkuPlan;
+  adByDay?: Record<string, number>; // реклама по дням (привязка к периоду); иначе costs.adSpend ÷ по месяцу
 }
 
 // ── MetricSet из метрик / плана ───────────────────────────────
@@ -137,18 +138,22 @@ export function setCompletion(fact: MetricSet, plan: MetricSet): number | null {
  * Метрики одного дня. ДРР месячный (ручной), поэтому распределяем его по дням
  * пропорционально выручке заказов дня. profit с ДРР = profit_без_ДРР − доля_рекламы.
  */
-export function dayMetrics(d: DailyFact, costs: SkuCosts, monthOrdersSum: number): MetricSet {
-  const dayAd = monthOrdersSum > 0 ? costs.adSpend * (d.ordersSum / monthOrdersSum) : 0;
-  // метрики дня без рекламы, затем вычитаем дневную долю рекламы
-  const base = calcSkuMetrics(aggregateFacts([d]), { ...costs, adSpend: 0 });
-  const profitWithAdv = base.profitWithoutAdv - dayAd;
+export function dayMetrics(d: DailyFact, costs: SkuCosts, monthOrdersSum: number, dayAd?: number): MetricSet {
+  const share = monthOrdersSum > 0 ? d.ordersSum / monthOrdersSum : 0;
+  // реклама: если передана подневная (привязка к периоду отчёта) — берём её (вкл. 0 вне периода),
+  // иначе fallback — месячная сумма ÷ пропорционально выручке дня.
+  const ad = dayAd ?? costs.adSpend * share;
+  // надбавку за рассрочку (месячная) распределяем по дням пропорционально выручке
+  const dayCredit = (costs.creditUplift ?? 0) * share;
+  const base = calcSkuMetrics(aggregateFacts([d]), { ...costs, adSpend: 0, creditUplift: 0 });
+  const profitWithAdv = base.profitWithoutAdv - dayCredit - ad;
   return {
     ordersSum: base.ordersSum,
     ordersQty: base.ordersQty,
     buyoutSum: base.buyoutSum,
     buyoutQty: base.buyoutQty,
-    adSum: dayAd,
-    drr: div(dayAd, base.ordersSum),
+    adSum: ad,
+    drr: div(ad, base.ordersSum),
     profit: profitWithAdv,
     margin: div(profitWithAdv, base.buyoutSum),
   };
@@ -190,7 +195,9 @@ export function buildProductRow(p: ProductInput, ctx: MonthContext): ProductRow 
     margin: planMonth.margin,
   };
 
-  const daily = p.daily.map((d) => dayMetrics(d, p.costs, totals.ordersSum));
+  const daily = p.daily.map((d) =>
+    dayMetrics(d, p.costs, totals.ordersSum, p.adByDay ? (p.adByDay[d.day] ?? 0) : undefined),
+  );
 
   return {
     sku: p.sku,

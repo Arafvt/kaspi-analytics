@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getDashboard, getUnit, getPlan, savePlan } from '../services/rnpData.js';
+import { getDashboard, getUnit, getPlan, savePlan, getAnalytics } from '../services/rnpData.js';
 
 /**
  * Эндпоинты РНП-аналитики (только чтение).
@@ -16,6 +16,12 @@ export async function rnpRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/rnp/unit', async (req) => {
     const { period } = req.query as { period?: string };
     return getUnit(period ?? new Date().toISOString().slice(0, 7));
+  });
+
+  // Аналитика: ABC-анализ, резерв возвратов, точка безубыточности
+  app.get('/api/rnp/analytics', async (req) => {
+    const { month } = req.query as { month?: string };
+    return getAnalytics(month ?? new Date().toISOString().slice(0, 7));
   });
 
   // План/факт по месяцу (ПЛАН-таблица)
